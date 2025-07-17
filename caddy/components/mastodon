@@ -1,0 +1,110 @@
+# Mastodon component
+#
+# Usage example:
+#
+# This sets up a reverse proxy called 'live' on the host 'my.mastodon.com'.
+# Caddy looks after all the certificate management. If you're not using
+# cloudflare DNS, remove the 'tls { dns cloudflare ..}' section.
+#
+# my.mastodon.com {
+#   import mast live "http://f1.mast.internal:4001" "http://f2.mast.internal:4001" "http://f1.mast.internal:3001" "http://f2.mast.internal:3001"
+# }
+#
+#   It tries to load files from /home/mastodon/live/public (See the root * line)
+#   Logs are stored in /var/log/caddy/live.log (see 'log std')
+#
+#   The next two params specify where streaming/websocket connections are
+#   load balanced between. If you only have one frontend server, just put
+#   it there twice.
+#
+#   The last two params are the reverse proxy to Puma - the main frontend.
+#   Same deal, if you only have one frontend server, just put it there twice.
+#
+#   It's expected that the actual /home/mastodon/PROXYNAME directory is a NFS
+#   mount (or something similar, fuse?) from a central location, and the same
+#   files are visible everywhere.
+#
+
+(mast) {
+	@local {
+		file
+		not path /
+	}
+
+	@local_media {
+		path_regexp /system/(.*)
+	}
+
+	@streaming {
+		path /api/v1/streaming/*
+		path /api/v1/streaming
+	}
+
+	@debug {
+		path /debug
+	}
+
+	@cache_control {
+		path_regexp ^/(emoji|packs|/system/accounts/avatars|/system/media_attachments/files)
+	}
+
+	tls {
+		dns cloudflare {env.CF_API_TOKEN}
+	}
+
+	root * /home/mastodon/{args[0]}/public
+
+	log std {
+		output file /var/log/caddy/{args[0]}.log
+	}
+
+	encode zstd gzip
+
+	handle_errors {
+		rewrite 500.html
+		file_server
+	}
+
+	header /sw.js Cache-Control "public, max-age=0"
+	header @cache_control Cache-Control "public, max-age=600, immutable"
+
+	handle @debug {
+		respond "Hello, debug! You're using {http.request.proto}"
+	}
+
+	handle @local {
+		file_server
+	}
+
+	# This is where the proxying actually happens. See docs above
+	reverse_proxy @streaming {
+		import cf_proxy
+		to {args[1]} {args[2]}
+		lb_policy least_conn
+		lb_retries 2
+		fail_duration 30s
+		max_fails 1
+		header_up X-Forwarded-Port 443
+		header_up X-Forwarded-Proto https
+		transport http {
+			keepalive 5s
+			keepalive_idle_conns 10
+		}
+	}
+
+	reverse_proxy {
+		import cf_proxy
+		to {args[3]} {args[4]}
+		lb_policy least_conn
+		lb_retries 2
+		fail_duration 30s
+		max_fails 1
+		header_up X-Forwarded-Port 443
+		header_up X-Forwarded-Proto https
+		transport http {
+			keepalive 5s
+			keepalive_idle_conns 10
+		}
+	}
+}
+

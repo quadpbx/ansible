@@ -1,0 +1,9 @@
+# Basic unconfigured role. By default,
+# it installs php83, because reasons.
+---
+- hosts: localhost
+  roles:
+    - ubuntu-base
+    - php83
+    - docker
+

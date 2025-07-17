@@ -1,0 +1,6 @@
+---
+dependencies:
+  - ubuntu-base
+  - php83
+  - docker
+

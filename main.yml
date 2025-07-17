@@ -1,0 +1,9 @@
+---
+- hosts: all
+  strategy: free
+  tasks:
+    - include_role:
+        name: repo
+      when: "'repo' in group_names"
+      tags: always
+

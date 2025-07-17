@@ -1,0 +1,63 @@
+- name: Install GOLang
+  include_role:
+    name: gantsign.golang
+  vars:
+    golang_version: 1.21.4
+  when: withgo is defined
+
+- name: Creating a symlink for go
+  ansible.builtin.file:
+    src: "/opt/go/{{ ansible_local.golang.general.version }}/bin/go"
+    dest: "/usr/bin/go"
+    state: link
+  when: withgo is defined
+
+- name: Install NodeJS
+  include_role:
+    name: geerlingguy.nodejs
+  vars:
+    nodejs_version: "20.x"
+  when: withnode is defined
+
+- name: Install PHP Development Packages
+  package:
+    name:
+      [
+        "php{{ php_version }}-swoole",
+        "php{{ php_version }}-xdebug",
+      ]
+    state: present
+  when: php_version is defined and dev is defined
+
+- name: Remove any leftover PHP Development Packages
+  package:
+    name:
+      [
+        "php{{ php_version }}-swoole",
+        "php{{ php_version }}-xdebug",
+      ]
+    state: absent
+  when: php_version is defined and dev is not defined
+
+- name: Put xdebug settings in place
+  copy:
+    src: 50-xdebug.ini
+    dest: "/etc/php/{{ php_version }}/cli/conf.d/"
+  when: php_version is defined and dev is defined
+
+- name: Remove xdebug settings as non-dev environment
+  file:
+    dest: "/etc/php/{{ php_version }}/cli/conf.d/"
+    state: absent
+  when: php_version is defined and dev is not defined
+
+- name: Get NodeJS unsafe-perm setting
+  shell: npm config get unsafe-perm
+  register: unsafe_perm
+  changed_when: false
+  when: withnode is defined
+
+- name: Change NodeJS unsafe-perm setting to true
+  shell: npm config set unsafe-perm true
+  when: withnode is defined and unsafe_perm.stdout == 'false'
+

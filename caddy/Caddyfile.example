@@ -1,0 +1,40 @@
+# Caddyfile template. Don't delete the cf_proxy line, it's needed
+# for everything.
+{
+	storage file_system {
+		root "/opt/caddy"
+	}
+	log std {
+		output file /var/log/caddy/caddy.log
+		level debug
+		include http.handlers.reverse_proxy
+	}
+}
+
+(cf_proxy) {
+	trusted_proxies __CLOUDFLARE__
+	header_up X-Forwarded-For {http.request.header.CF-Connecting-Ip}
+}
+
+# The following is actually really what is in use by me. Fix it to
+# be correct for you.
+
+#component mastodon
+
+dev.mastodon.au {
+	import mast dev "http://f2.mastodon.au:4001" "http://f2.mastodon.au:4001" "http://f2.mastodon.au:3001" "http://f2.mastodon.au:3001"
+}
+
+mastodon.au mta-sts.mastodon.au {
+	import mast live "http://f1.mastodon.au:4000" "http://f1.mastodon.au:4000" "http://f1.mastodon.au:3000" "http://f1.mastodon.au:3000"
+}
+
+#component simpleproxy
+
+translate.mastodon.au {
+	import simpleproxy translate "http://10.65.11.20:5000"
+}
+
+yourpix.au www.yourpix.au {
+	import simpleproxy yourpix "http://10.65.11.50:80"
+}

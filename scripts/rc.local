@@ -1,0 +1,39 @@
+#!/bin/bash
+
+# Default rc.local that will always regen machine id and
+# host keys if they're missing. Dunno why this doesn't
+# happen by default.
+
+create_key() {
+        msg="$1"
+        shift
+        file="$1"
+        shift
+	printf %s "$msg"
+	ssh-keygen -q -f "$file" -N '' "$@"
+	echo
+	if command -v restorecon >/dev/null 2>&1; then
+		restorecon "$file" "$file.pub"
+	fi
+	ssh-keygen -l -f "$file.pub"
+}
+
+
+create_keys() {
+        create_key "Creating SSH2 Host RSA key; this may take some time ..."  /etc/ssh/ssh_host_rsa_key -t rsa
+        create_key "Creating SSH2 Host DSA key; this may take some time ..." /etc/ssh/ssh_host_dsa_key -t dsa
+        create_key "Creating SSH2 Host ECDSA key; this may take some time ..." /etc/ssh/ssh_host_ecdsa_key -t ecdsa
+        create_key "Creating SSH2 Host ED25519 key; this may take some time ..." /etc/ssh/ssh_host_ed25519_key -t ed25519
+}
+
+if [ ! -s /etc/machine-id ]; then
+	systemd-machine-id-setup
+fi
+
+if [ ! -e /etc/ssh/ssh_host_rsa_key ]; then
+	# could be sshd or ssh
+	systemctl stop ssh || systemctl stop sshd
+	create_keys
+	systemctl start ssh || systemctl start sshd
+fi
+

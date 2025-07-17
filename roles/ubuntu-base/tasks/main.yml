@@ -1,0 +1,262 @@
+---
+- name: Change hostname if wrong
+  hostname:
+    name: "{{ hostname }}"
+  when: hostname is defined
+  tags: hostname
+
+- name: Update /etc/hosts with correct hostname
+  template: src=hosts dest=/etc/hosts
+  when: hostname is defined
+  tags: hostname
+
+- name: Remove unneeded services
+  apt:
+    name:
+      - needrestart
+      - snapd
+      - cloud-init
+      - ubuntu-advantage-tools
+      - multipath-tools
+    state: absent
+    purge: yes
+    autoremove: yes
+
+# Removing cloud-init and snapd removes netplan, spc, and fdisk.
+# We install them AFTER removing cloud-init so they won't get
+# removed accidentally as a dependancy again.
+- name: Install base packages that are not present on minimized systems
+  apt:
+    name:
+      - bash-completion
+      - cron
+      - dialog
+      - fdisk
+      - gpg
+      - iputils-ping
+      - jq
+      - nano
+      - netplan.io
+      - open-vm-tools
+      - qemu-guest-agent
+      - rsync
+      - software-properties-common
+      - sysstat
+      - tmux
+      - screen
+      - uuid-runtime
+      - vim
+      - htop
+      - iotop
+    state: present
+
+- name: Enable qemu-guest-agent service when running in QEMU
+  systemd:
+    state: started
+    enabled: true
+    name: qemu-guest-agent
+  tags:
+    - qemu
+  when: ansible_virtualization_role == "guest" and ansible_virtualization_type == "kvm"
+
+- name: Fix default editor
+  alternatives:
+    name: editor
+    path: /usr/bin/vim.basic
+  tags:
+    - editor
+
+- name: Turn off paste blocking in bash
+  lineinfile:
+    path: /etc/bash.bashrc
+    line: bind 'set enable-bracketed-paste off'
+    create: yes
+  tags:
+    - bracket
+
+- name: Turn off paste blocking everywhere else
+  lineinfile:
+    path: /etc/inputrc
+    line: "set enable-bracketed-paste off"
+    create: yes
+  tags:
+    - bracket
+
+- name: Enable debug shell on /dev/tty9 for emergency recovery
+  systemd:
+    name: debug-shell.service
+    state: started
+    enabled: yes
+  tags:
+    - systemd
+
+- name: Hard-code editor
+  lineinfile:
+    path: /etc/bash.bashrc
+    line: export EDITOR=vim
+    create: yes
+
+- name: Hard-code visual
+  lineinfile:
+    path: /etc/bash.bashrc
+    line: export VISUAL=vim
+    create: yes
+
+- name: Fix more dumping empty lines
+  lineinfile:
+    path: /etc/bash.bashrc
+    line: alias more='more -e'
+    create: yes
+
+- name: Stop rsyslog from dropping privs
+  lineinfile:
+    path: /etc/rsyslog.conf
+    regex: '^.PrivDropTo'
+    state: absent
+  tags: rsyslog
+
+- name: Update grub defaults
+  copy:
+    src: grubdefault
+    dest: /etc/default/grub
+  notify: update-grub
+  register: grub
+
+- name: Put our /etc/sysctl.d files in place
+  copy:
+    src: "{{ item }}"
+    dest: /etc/sysctl.d/
+  with_items:
+    - 51-inotify.conf
+    - 10-keepalives.conf
+    - 60-faster-tcp.conf
+  notify: sysctl-reload
+  tags:
+    - sysctl
+
+- meta: flush_handlers
+  tags:
+    - net
+    - sysctl
+
+- name: Create default ssh config
+  copy:
+    src: sshconfig
+    dest: /root/.ssh/config
+    force: no
+  tags:
+    - ssh
+
+- name: Delete original netplan yaml
+  file:
+    path: /etc/netplan/00-installer-config.yaml
+    state: absent
+  tags:
+    - net
+
+- name: Create our netplan conf if missing
+  copy:
+    src: 50-netplan.yaml
+    dest: /etc/netplan/
+    force: no
+  tags:
+    - net
+
+- name: Set system start timeout to 60s
+  lineinfile:
+    path: /etc/systemd/system.conf
+    regex: '^#?DefaultTimeoutStartSec='
+    line: DefaultTimeoutStartSec=60s
+  tags:
+    - systemd
+
+- name: Set system stop timeout to 30s
+  lineinfile:
+    path: /etc/systemd/system.conf
+    regex: '^#?DefaultTimeoutStopSec='
+    line: DefaultTimeoutStopSec=30s
+  tags:
+    - systemd
+
+- name: Never hang waiting for network connections
+  systemd:
+    name: systemd-networkd-wait-online.service
+    state: stopped
+    enabled: no
+    masked: yes
+  tags:
+    - systemd
+
+- name: Set /tmp to be 0777 instead of 1777
+  copy:
+    src: tmp-0777.conf
+    dest: /etc/tmpfiles.d/
+  tags:
+    - systemd
+    - tmpfiles
+  notify:
+    - systemd-tmpfiles
+
+- name: Disable memory deduplication (wastes CPU)
+  copy:
+    src: ksm.conf
+    dest: /etc/tmpfiles.d/
+  tags:
+    - systemd
+    - ksm
+  notify:
+    - systemd-tmpfiles
+
+- name: Allow datetime for bash history.
+  copy:
+    src: bash_history_ts.sh
+    dest: /etc/profile.d/
+
+- name: Is resolv.conf a symlink?
+  stat:
+    path: /etc/resolv.conf
+  register: rconf
+  tags:
+    - dns
+  when: ignoreresolv is not defined
+
+- name: Delete symlink
+  file:
+    state: absent
+    path: /etc/resolv.conf
+  when: ignoreresolv is not defined and rconf.stat.exists and rconf.stat.islnk
+  tags:
+    - dns
+
+- name: Create valid /etc/resolv.conf
+  template:
+    src: resolv.conf
+    dest: /etc/resolv.conf
+  when: ignoreresolv is not defined
+  tags:
+    - dns
+
+# U22.04 has SSH8, which disables ssh-rsa keys.
+- name: Allow ssh-rsa in ssh keys
+  lineinfile:
+    path: /etc/ssh/ssh_config
+    state: present
+    insertafter: ^Host
+    regexp: 'PubkeyAcceptedKeyTypes '
+    line: "    PubkeyAcceptedKeyTypes +ssh-rsa"
+
+- name: Enable agent forwarding
+  lineinfile:
+    path: /etc/ssh/ssh_config
+    state: present
+    insertafter: ^Host
+    regexp: 'ForwardAgent '
+    line: "    ForwardAgent yes"
+
+- name: Do not acceptenv anything in sshd (Avoid Locale/LC_ALL issues)
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    state: absent
+    regexp: '^AcceptEnv'
+
+

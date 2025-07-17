@@ -1,0 +1,4 @@
+dc_version: "2.32.4"
+dc_url: https://github.com/docker/compose/releases/download/v{{ dc_version }}/docker-compose-{{ ansible_facts.system }}-{{ ansible_facts.architecture }}
+dc_verpath: /usr/bin/docker-compose.{{ dc_version }}
+dc_realpath: /usr/bin/docker-compose

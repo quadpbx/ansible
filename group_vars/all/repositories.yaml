@@ -1,0 +1,7 @@
+---
+repos:
+  - name: core
+    src: git@github.com:phonebocx/core.git
+  - name: coreui
+    src: git@github.com:phonebocx/coreui.git
+

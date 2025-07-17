@@ -1,0 +1,27 @@
+# Caddyfile template. Don't delete the cf_proxy line, it's needed
+# for everything.
+{
+	storage file_system {
+		root "/opt/caddy"
+	}
+	log std {
+		output file /var/log/caddy/caddy.log
+		level debug
+		include http.handlers.reverse_proxy
+	}
+}
+
+(cf_proxy) {
+	trusted_proxies __CLOUDFLARE__
+	header_up X-Forwarded-For {http.request.header.CF-Connecting-Ip}
+}
+
+# The following line inserts the contents of components/mastodon here
+#component mastodon
+
+# The following line inserts the contents of components/simpleproxy here
+#component simpleproxy
+
+# If you're not using one, it doesn't need to be imported!
+
+

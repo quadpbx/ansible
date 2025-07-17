@@ -1,0 +1,10 @@
+---
+- name: Check out repos
+  git:
+    repo: "{{ item.src }}"
+    dest: "/usr/local/data/repo/{{ item.name }}"
+    accept_hostkey: yes
+  loop: "{{ repos }}"
+  notify:
+    - chown-everything
+

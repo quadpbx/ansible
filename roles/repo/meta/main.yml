@@ -1,0 +1,5 @@
+---
+dependencies:
+    - ubuntu-base
+    - php83
+

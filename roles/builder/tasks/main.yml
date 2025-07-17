@@ -1,0 +1,8 @@
+---
+- name: Install GOLang
+  include_role:
+    name: gantsign.golang
+  vars:
+    golang_version: 1.21.4
+  when: withgo is defined
+

@@ -1,0 +1,16 @@
+# Run this to delete everything identifying on this vm
+# so it can be cloned and deployed as a new machine
+
+sysprep: /etc/rc.local
+	apt-get -y autoremove --purge
+	apt-get -y remove --purge $$(dpkg -l | awk '/^r/ { print $$2 }')
+	apt-get clean
+	rm -rf /var/lib/systemd/random-seed /tmp/* /var/tmp/* /var/cache/* /etc/ssh/*key* /root/.bash_history /root/.gitconfig /root/.cache /root/.ssh/known_hosts /var/cache/apt/archives/* /var/log/*gz /var/log/*.[01] /var/log/cloud*log /var/log/bootstrap.log
+	for f in syslog lastlog wtmp; do echo -n > /var/log/$$f; done
+	cat /dev/zero > /bigzero || rm -f /bigzero
+	sync; fstrim -v /; sleep 5
+	sync; fstrim -v /; sleep 5
+	sync; fstrim -v /; sleep 5
+	poweroff
+
+

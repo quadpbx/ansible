@@ -1,0 +1,129 @@
+# This expects that 'COLLECTIONS' and 'ROLES' are already defined
+# Example:
+#  COLLECTIONS=ansible/posix vyos/vyos community/docker community/mysql
+#  ROLES=jhu-sheridan-libraries.postfix-smarthost geerlingguy.ntp
+
+# This is where ansible will put the files
+ACOLL=$(HOME)/.ansible/collections/ansible_collections
+AROLE=$(HOME)/.ansible/roles
+
+# These are where the distro puts them, eg, U2404
+SCOLL=/usr/lib/python3/dist-packages/ansible_collections
+
+# U2404 has a bunch of packages that are already installed. If the installed one
+# exists, that's good enough. Running 'update-ansible' will put EVERYTHING in
+# ACOLL anyway, so it doesn't matter.
+#
+# These are what are currently installed by the system
+SCINSTALLED=$(wildcard $(addsuffix /MANIFEST.json,$(addprefix $(SCOLL)/,$(COLLECTIONS))))
+
+# These are what SHOULD be installed in home/.ansible
+BASECPATHS=$(addsuffix /MANIFEST.json,$(addprefix $(ACOLL)/,$(COLLECTIONS)))
+
+# These are what are installed in home/.ansible, remove them from SCINSTALLED, as
+# whatever is installed locally wins
+LINSTALLED=$(wildcard $(BASECPATHS))
+SCREMAINING=$(filter-out $(subst $(ACOLL),$(SCOLL),$(LINSTALLED)),$(SCINSTALLED))
+
+# Anything left over is not installed in system OR local, and needs to be added
+CPATHS=$(sort $(filter-out $(subst $(SCOLL),$(ACOLL),$(SCREMAINING)),$(BASECPATHS)) $(SCREMAINING))
+
+ansible-debug:
+	@echo "Installed in $(SCOLL):"
+	@echo "   SCINSTALLED - $(SCINSTALLED)"
+	@echo "What should be installed in $(ACOLL):"
+	@echo "   BASECPATHS - $(BASECPATHS)"
+	@echo "What is actually installed in $(ACOLL):"
+	@echo "   LINSTALLED - $(LINSTALLED)"
+	@echo "Remaining after filtering:"
+	@echo "   SCREMAINING - $(SCREMAINING)"
+	@echo "Finally"
+	@echo "   CPATHS - $(CPATHS)"
+
+
+# Expands COLLECTIONS and ROLES into the full path of where they will end up
+RPATHS=$(addsuffix /README.md,$(addprefix $(AROLE)/,$(ROLES)))
+
+# This adds -force as a (fake phony) target. As it's a wildcard match
+# you can't actually PHONY it, which is slightly annoying
+FORCEDCPATHS=$(addsuffix /MANIFEST.json-force,$(addprefix $(ACOLL)/,$(COLLECTIONS)))
+FORCEDRPATHS=$(addsuffix /README.md-force,$(addprefix $(AROLE)/,$(ROLES)))
+
+# Normal install
+.PHONY: ansible-packages
+ansible-packages: $(CPATHS) $(RPATHS)
+
+# We can force an update, too
+.PHONY: update-ansible update-collections update-roles
+update-collections: $(FORCEDCPATHS)
+update-roles: $(FORCEDRPATHS)
+update-ansible: update-collections update-roles
+
+$(ACOLL)/%/MANIFEST.json:
+	@echo 'Installing ansible collection $(subst /,.,$(*)) into $(ACOLL) from match "$(*)"'
+	ansible-galaxy collection install $(subst /,.,$(*))
+
+$(ACOLL)/%/MANIFEST.json-force:
+	@echo 'Force-installing (eg, upgrade) ansible collection $(subst /,.,$(*)) into $(ACOLL) from match "$(*)"'
+	ansible-galaxy collection install $(subst /,.,$(*)) --force-with-deps
+
+# The latest nodejs role (7.0.0 at time of writing) requires a later version of
+# ansible (2.15) than is present in the Ubuntu repo (2.10). This causes it to
+# error about deb822_repository being missing. This pins it to the latest version
+# that works. When that's updated, this can be removed
+$(AROLE)/geerlingguy.nodejs/README.md $(AROLE)/geerlingguy.nodejs/README.md-force:
+	@if grep -q 6.1.1 $(AROLE)/geerlingguy.nodejs/meta/.galaxy_install_info 2>/dev/null; then \
+		echo "Pinned nodejs 6.1.1 already installed, no changes needed"; else \
+		echo 'Installing PINNED NODEJS role of geerlingguy.nodejs version 6.1.1'; ansible-galaxy role install geerlingguy.nodejs,6.1.1 --force; \
+	fi
+
+
+# Same for php-versions
+$(AROLE)/geerlingguy.php-versions/README.md $(AROLE)/geerlingguy.php-versions/README.md-force:
+	@if grep -q 6.2.0 $(@D)/meta/.galaxy_install_info 2>/dev/null; then \
+		echo "Pinned php-versions 6.2.0 already installed, no changes needed"; else \
+		echo 'Installing PINNED role of geerlingguy.php-versions version 6.2.0'; ansible-galaxy role install geerlingguy.php-versions,6.2.0 --force; \
+	fi
+
+$(AROLE)/%/README.md:
+	@echo 'Installing ansible role $(*) into $(AROLE) from match "$(*)"'
+	ansible-galaxy role install $(*)
+
+$(AROLE)/%/README.md-force:
+	@echo 'Force-installing (eg, upgrade) ansible role $(*) into $(AROLE) from match "$(*)"'
+	ansible-galaxy role install $(*) --force-with-deps
+
+
+.PHONY: list-roles list-local-roles list-remote-roles
+list-roles:
+	ansible-galaxy role list -p ./roles
+
+list-local-roles:
+	@for role_dir in roles/*/; do \
+		if [ ! -f "$${role_dir}meta/.galaxy_install_info" ]; then \
+			role_name=$$(basename $${role_dir}); \
+			echo "Role: $${role_name}"; \
+		fi \
+	done
+
+list-remote-roles:
+	@for role_dir in roles/*/; do \
+		if [ -f "$${role_dir}meta/.galaxy_install_info" ]; then \
+			role_name=$$(basename $${role_dir}); \
+			role_version=$$(grep 'version:' "$${role_dir}meta/.galaxy_install_info" | cut -d ' ' -f 2); \
+			echo "Role: $${role_name}, Version: $${role_version}"; \
+		fi \
+	done
+
+.PHONY: update-remote-roles
+update-remote-roles:
+	@for role_dir in roles/*/; do \
+		if [ -f "$${role_dir}meta/.galaxy_install_info" ]; then \
+			role_name=$$(basename $${role_dir}); \
+			ansible-galaxy install -p ./roles $${role_name} --force; \
+		fi \
+	done
+
+save-remote-role-%:
+	ansible-galaxy install -p ./roles $(*) --force
+

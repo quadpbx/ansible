@@ -1,0 +1,10 @@
+{
+  "userland-proxy": false,
+  "iptables": true,
+  "experimental": true,
+  "default-address-pools":
+  [
+    {"base":"100.99.0.0/16","size":24}
+  ]
+}
+

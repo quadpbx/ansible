@@ -1,0 +1,15 @@
+---
+- name: Install Docker Compose version {{ dc_version }}
+  get_url:
+    url: "{{ dc_url }}"
+    dest: "{{ dc_verpath }}"
+    owner: root
+    group: root
+    mode: 0755
+
+- name: Put {{ dc_realpath }} in place
+  file:
+    src: "{{ dc_verpath }}"
+    dest: "{{ dc_realpath }}"
+    state: link
+

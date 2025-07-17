@@ -1,0 +1,18 @@
+---
+- name: Install Composer
+  shell: curl -L https://getcomposer.org/installer | /usr/bin/php -- --filename='composer' --install-dir='/usr/bin'
+  args:
+    creates: /usr/bin/composer
+
+- name: install other reqs
+  package:
+    name: [ 'zip', 'unzip' ]
+    state: present
+
+- name: Stop composer yelling about root
+  lineinfile:
+    path: /etc/profile
+    line: export COMPOSER_ALLOW_SUPERUSER=1
+    create: yes
+
+

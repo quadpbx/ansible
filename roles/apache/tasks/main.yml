@@ -1,0 +1,33 @@
+---
+# Before we do anything, make sure apache is corect
+- name: Activate apache module {{ item }}
+  apache2_module:
+    state: present
+    name: "{{ item }}"
+  loop:
+    - rewrite
+    - ssl
+    - remoteip
+  notify: restart-apache
+
+- name: Delete default site if it exists
+  file:
+    path: /etc/apache2/sites-enabled/000-default.conf
+    state: absent
+  notify: reload-apache
+
+- name: Put apache config in place
+  template:
+    src: "{{ item }}"
+    dest: /etc/apache2/sites-enabled/
+  loop:
+    - 000-devel.conf
+    - 000-devel-ssl.conf
+  notify: restart-apache
+
+- name: Put Clouflare remoteip.conf in place
+  template:
+    src: remoteip.conf
+    dest: /etc/apache2/conf-enabled/remoteip.conf
+  notify: restart-apache
+

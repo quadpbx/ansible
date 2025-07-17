@@ -1,0 +1,91 @@
+---
+
+- name: Make sure we're python3
+  apt:
+    name: [ 'python-is-python3' ]
+    state: present
+    update_cache: yes
+
+- name: Install required packages
+  package:
+    name:
+      - 'apt-transport-https'
+      - 'ca-certificates'
+      - 'curl'
+      - 'software-properties-common'
+      - 'python3-pip'
+      - 'virtualenv'
+      - 'python3-setuptools'
+      - 'python3-docker'
+      - 'python3-pymysql'
+      - 'parted'
+      - 'xfsprogs'
+    state: present
+  tags:
+    - docker
+    - mysql
+
+- name: Add Docker GPG apt Key
+  get_url:
+    url: https://download.docker.com/linux/debian/gpg
+    dest: /etc/apt/keyrings/docker.asc
+    mode: 0666
+
+- name: Add Docker Repository
+  apt_repository:
+    repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/{{ ansible_distribution | lower }} {{ ansible_distribution_release }} stable"
+    state: present
+
+- name: Create /var/lib/docker partition
+  parted:
+    device: "{{ dockerdisk }}"
+    number: 1
+    state: present
+    part_type: primary
+  tags:
+    - partition
+  when: dockerdisk is defined
+
+- name: Create /var/lib/docker filesystem
+  filesystem:
+    dev: "{{ dockerdisk }}1"
+    fstype: xfs
+  tags:
+    - partition
+  when: dockerdisk is defined
+
+- name: Mount /var/lib/docker filesystem
+  mount:
+    src: "{{ dockerdisk }}1"
+    path: /var/lib/docker
+    state: mounted
+    fstype: xfs
+  tags:
+    - partition
+  when: dockerdisk is defined
+
+- name: Install docker
+  package:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-compose-plugin
+    state: present
+
+- name: Make sure docker override exists
+  file: path=/etc/systemd/system/docker.service.d state=directory
+
+- name: Put systemd override in place to allow local binds if in 10.0.0.0/8
+  template: src=override.conf dest=/etc/systemd/system/docker.service.d/override.conf
+  notify: systemctl-reload
+
+# Run systemctl reload if we need to, before anything else
+- meta: flush_handlers
+
+- name: Change docker default network to use RFC6598 ranges
+  copy:
+    src: daemon.json
+    dest: /etc/docker/daemon.json
+  notify: restart-docker

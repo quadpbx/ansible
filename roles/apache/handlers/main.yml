@@ -1,0 +1,11 @@
+---
+- name: restart-apache
+  service: name=apache2 state=restarted
+
+- name: chown-everything
+  file:
+    owner: www-data
+    group: www-data
+    path: "{{ webroot | default('/var/www/html') }}"
+    state: directory
+    recurse: true
