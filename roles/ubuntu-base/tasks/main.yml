@@ -40,7 +40,6 @@
       - open-vm-tools
       - qemu-guest-agent
       - rsync
-      - software-properties-common
       - sysstat
       - tmux
       - screen
