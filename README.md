@@ -26,4 +26,3 @@ Update `group_vars/all/ssh_keys` unless you're actually xrobau. At least add you
 Run `make base` to set the local machine up as a development
 machine.
 
-
