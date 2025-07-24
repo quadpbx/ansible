@@ -15,7 +15,7 @@ export ANSIBLE_HOST_KEY_CHECKING
 GITCONFIG=$(HOME)/.gitconfig
 
 .PHONY: setup
-setup: $(BINS) $(GITCONFIG) group_vars/all/cloudflare.yaml ansible-packages /etc/rc.local
+setup: $(BINS) $(GITCONFIG) group_vars/all/cloudflare.yaml ansible-packages /etc/rc.local fixvim
 
 include $(wildcard includes/Makefile.*)
 
